@@ -6,5 +6,5 @@ SERVICE_ACCOUNT_GOOGLE.txt
 /Lib/
 /Scripts/
 /Include/
-\Control_de_inversiones\__pycache__\
+__pycache__/
 pyvenv.cfg
