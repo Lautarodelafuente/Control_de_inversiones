@@ -3,14 +3,21 @@ from googleapiclient.discovery import build
 from google.oauth2 import service_account
 import Base_de_datos_postgresql as bd
 import pandas as pd
+import os
+from dotenv import load_dotenv
 
+
+# Cargamos las variables de entorno del archivo .env
+load_dotenv()
 
 # SETEAMOS LOS PARAMETROS DE LA API
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
-KEY = 'F:\Lautaro\Cursos\Python\Yfinance_python\Google\SERVICE_ACOUNT_KEY.json'
+KEY = os.getenv('PATH_GOOGLE') + '\SERVICE_ACOUNT_KEY.json'
+
+print(KEY)
 
 # Escribe aquí el ID de tu documento:
-SPREADSHEET_ID = '1nKN2XGoLFRQbKSyghs_Or3ceSU4Ild7JEFqlppb6iHs'
+SPREADSHEET_ID = os.getenv('MIS_INVERSIONES')
 
 # Enviamos las credenciales
 creds = None
@@ -51,12 +58,12 @@ def escribir(rango_hoja, valores):
             body={'values':valores}
         ).execute()
 
+        print(f"Datos insertados correctamente.\n{(result.get('updates').get('updatedCells'))}")
+
     except Exception as e:
         print(f'Error al updetear los registros en {rango_hoja}:\n      {e}')
     
-    print(f"Datos insertados correctamente.\n{(result.get('updates').get('updatedCells'))}")
-
-
+    
 # BORRA LOS REGISTROS Y CARGA LOS NUEVOS EN EL GOOGLE SHEET
 def update(rango_hoja, valores):
     
@@ -71,6 +78,8 @@ def update(rango_hoja, valores):
 
     except Exception as e:
         print(f'Error al updetear los registros en {rango_hoja}:\n      {e}')
+
+    return result
 
 
 # TRAE LOS DATOS DE LA VISTA V_DOLAR_CCL_HISTORICO DE LA BASE DE DATOS

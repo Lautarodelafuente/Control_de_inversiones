@@ -8,3 +8,4 @@ SERVICE_ACCOUNT_GOOGLE.txt
 /Include/
 __pycache__/
 pyvenv.cfg
+/logs/
