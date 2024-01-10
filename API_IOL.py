@@ -208,6 +208,9 @@ def portafolio(URL_BASE=URL_API):
     
     portafolio_actual = requests.get(endpoint, headers=header).json()
 
+    '''print('Portafolio:')
+    print(portafolio_actual)'''
+
     activos_portafolio_arg = portafolio_actual['activos']
 
     portafolio = []

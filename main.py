@@ -3,6 +3,7 @@ import Base_de_datos_postgresql as bd
 import DolarCCL_historico as CCL_hist
 import DolarCCL_API as CCL_api
 import Python_google_sheet
+import Cotizaciones_rava as CR
 from datetime import datetime
 from os.path import exists 
 from os import system
@@ -65,6 +66,18 @@ with open(f'Control_de_inversiones/logs/{archivo_log}','w') as log:
     except Exception as e:
         log.write(f'{datetime.now()}: ERROR! Al tratar de cargar los datos de Portafolio IOL: {e}\n')
 
+
+    #--------------------------------------------------------------------------------#
+    # PROCESOS COTIZACION RAVA
+
+    # Envia a la base de datos la informacion de Cotizaciones rava bursatil
+    try:
+        CR.proceso_general_rava()
+        log.write(f'{datetime.now()}: EXITO! Carga de datos Cotizaciones rava exitosa!\n')
+    except Exception as e:
+        log.write(f'{datetime.now()}: ERROR! Al tratar de cargar los datos de Cotizaciones rava: {e}\n')
+    
+    
     #--------------------------------------------------------------------------------#
     # PROCESOS GOOGLE SHEETS
 
@@ -74,6 +87,14 @@ with open(f'Control_de_inversiones/logs/{archivo_log}','w') as log:
         log.write(f'{datetime.now()}: EXITO! Carga de datos DolarCCL en Google Sheets exitosa!\n')
     except Exception as e:
         log.write(f'{datetime.now()}: ERROR! Al tratar de cargar los datos de DolarCCL en Google Sheets: {e}\n')
+
+    # Cargamos los datos de cotizaciones en la planilla de google sheets
+    try:
+        Python_google_sheet.update(rango_hoja='Cotizacion acciones Rava!A2',valores=Python_google_sheet.cotizacion_rava_bd())
+        log.write(f'{datetime.now()}: EXITO! Carga de cotizaciones rava en Google Sheets exitosa!\n')
+    except Exception as e:
+        log.write(f'{datetime.now()}: ERROR! Al tratar de cargar los datos de cotizaciones rava en Google Sheets: {e}\n')
+
 
 
     final = datetime.now()

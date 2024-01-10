@@ -103,14 +103,60 @@ def dolar_historico_bd():
     return dolar
 
 
-if __name__ == '__main__':
-    dolar = dolar_historico_bd()
+# TRAE LOS DATOS DE LA VISTA V_DOLAR_CCL_HISTORICO DE LA BASE DE DATOS
+def cotizacion_rava_bd():
 
-    #print(dolar)
+    cotizacion_rava_bd = '''
+    SELECT ticker, ultima_cotizacion, porcentaje_gan_dia, porcentaje_gan_mes, porcentaje_gan_año, cotizacion_anterior, cotizacion_apertura, cotizacion_minimo, cotizacion_maximo, hora, vol_nominal, vol_efectivo,'0' as ratio,0 as ccl, tipo_accion
+        FROM public.rava_cotizacion_acciones_arg_lider
+    union all
+    select ticker, ultima_cotizacion, porcentaje_gan_dia, porcentaje_gan_mes, porcentaje_gan_año, cotizacion_anterior, cotizacion_apertura, cotizacion_minimo, cotizacion_maximo, hora, vol_nominal, vol_efectivo,'0' as ratio,0 as ccl, tipo_accion 
+        from rava_cotizacion_acciones_arg_gral 
+    union all
+    select ticker, ultima_cotizacion, porcentaje_gan_dia, porcentaje_gan_mes, porcentaje_gan_año, cotizacion_anterior, cotizacion_apertura, cotizacion_minimo, cotizacion_maximo, hora, vol_nominal, vol_efectivo,ratio,ccl, 'Cedear' as tipo_accion 
+        from rava_cotizacion_cedear_diaria 
+    '''
+
+    conn = bd.conexion_base_de_datos()
+
+    cur = conn.cursor()
+
+    cur.execute(cotizacion_rava_bd)
+
+    df_cotizacion_rava_bd = cur.fetchall()
+
+    #print(df_cotizacion_cedear_bd[1][0])
+
+    cotizacion_rava = []
+
+    filas = []
+
+    for i in range(len(df_cotizacion_rava_bd)):
+        #print(df_cotizacion_cedear_bd[i])
+        for e in range(len(df_cotizacion_rava_bd[i])):
+            #df_cotizacion_cedear_bd[i][e] = str(df_cotizacion_cedear_bd[i][e]).replace('.',',')
+            filas.append(str(df_cotizacion_rava_bd[i][e]).replace('.',','))
+        cotizacion_rava.append(filas)
+        filas = []
+    
+    #print(cedear_rava)
+        
+    return cotizacion_rava
+
+
+if __name__ == '__main__':
+    
+    dolar = dolar_historico_bd()
+    cotizacion_rava = cotizacion_rava_bd()
+    update(rango_hoja='CCL!A2',valores=dolar)
+    update(rango_hoja='Cotizacion Cedear Rava!A2',valores=cotizacion_rava)
+
+    #print(cotizacion_cedear_rava)
+
     #leer(rango_hoja='CCL!A2:C10')
     #borrar(rango_hoja='CCL!A2:C')
     #escribir(rango_hoja='CCL!A1:C10',valores=values)
-    update(rango_hoja='CCL!A2',valores=dolar)
+    
 
 
 

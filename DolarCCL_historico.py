@@ -186,6 +186,7 @@ def proceso_gral(url):
 
         time.sleep(10)
 
+
         # Clickeamos el boton "VER DATOS" para hacer efectiva nuestra seleccion
         driver.find_element(By.XPATH,'//button[@class="general-historical__button boton"]').click()
         print('Click en "VER DATOS"')
