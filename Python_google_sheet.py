@@ -14,7 +14,7 @@ load_dotenv()
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 KEY = os.getenv('PATH_GOOGLE') + '\SERVICE_ACOUNT_KEY.json'
 
-print(KEY)
+#print(KEY)
 
 # Escribe aquí el ID de tu documento:
 SPREADSHEET_ID = os.getenv('MIS_INVERSIONES')

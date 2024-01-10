@@ -43,8 +43,8 @@ def obtener_token(URL_BASE=URL_API):
     # Creamos la request para conseguir el objeto TOKEN donde recibiremos el token de acceso a la api, el token para actualizarlo en caso de ser necesaro, entre otros datos como la fecha de solicitud, tiempo de expiracion, ect. # 'access_token', 'token_type', 'expires_in' (segundos), 'refresh_token', '.issued' (fecha de solicitud), '.expires' (fecha de expiracion), '.refreshexpires'
     token = requests.post(URL_BASE + '/token', headers=header, data=body)
 
-    print(f'Respuesta: {token}')
-    print()
+    #print(f'Respuesta: {token}')
+    #print()
 
     object_token = token.json()
 
@@ -53,8 +53,8 @@ def obtener_token(URL_BASE=URL_API):
 
     print('Aceso al token concedido!')
     print()
-    print(access_tokens)
-    print()
+    #print(access_tokens)
+    #print()
     #print(f'datetime_expire = {expire_datetime}')
     #print(datetime.now() + timedelta(seconds=899))
 
@@ -157,7 +157,7 @@ def operaciones_historicas_to_database(operaciones_historicas,conn):
 
         df = df.replace({np.nan: None})
 
-        print(df)
+        #print(df)
 
         tupla = [tuple(x) for x in df.to_numpy()]
 
@@ -232,7 +232,7 @@ def portafolio(URL_BASE=URL_API):
 
     df_portafolio_actual = df[['simbolo', 'descripcion', 'pais', 'mercado','tipo', 'plazo', 'moneda','cantidad', 'comprometido', 'puntosVariacion', 'variacionDiaria','ultimoPrecio', 'ppc', 'gananciaPorcentaje', 'gananciaDinero','valorizado', 'parking']]
 
-    print(df)
+    #print(df)
 
     print('Operaciones IOL extraidas con exito')
     print() 

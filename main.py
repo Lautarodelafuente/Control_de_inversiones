@@ -7,6 +7,13 @@ import Cotizaciones_rava as CR
 from datetime import datetime
 from os.path import exists 
 from os import system
+import os 
+from dotenv import load_dotenv
+
+
+
+# Cargamos las variables de entorno del archivo .env
+load_dotenv()
 
 #--------------------------------------------------------------------------------#
 # SETEAMOS EL LOG
@@ -14,11 +21,12 @@ from os import system
 inicio = datetime.now()
 log_str = inicio.strftime('%Y%m%d_%H%M%S')
 archivo_log = f'log_control_inversiones_{log_str}.log'
+path_logs = os.getenv('Carpeta_Logs')
 
-if not exists('Control_de_inversiones/logs'):
+if not exists(path_logs):
     system('mkdir logs')
 
-with open(f'Control_de_inversiones/logs/{archivo_log}','w') as log:
+with open(f'{path_logs}/{archivo_log}','w') as log:
 
     log.write(f'{datetime.now()}: Iniciando ejecucion del programa...\n')
 
@@ -94,7 +102,6 @@ with open(f'Control_de_inversiones/logs/{archivo_log}','w') as log:
         log.write(f'{datetime.now()}: EXITO! Carga de cotizaciones rava en Google Sheets exitosa!\n')
     except Exception as e:
         log.write(f'{datetime.now()}: ERROR! Al tratar de cargar los datos de cotizaciones rava en Google Sheets: {e}\n')
-
 
 
     final = datetime.now()

@@ -9,3 +9,6 @@ SERVICE_ACCOUNT_GOOGLE.txt
 __pycache__/
 pyvenv.cfg
 /logs/
+/build/
+/dist/
+main.spec

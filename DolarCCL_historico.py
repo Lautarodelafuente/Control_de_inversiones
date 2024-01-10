@@ -208,8 +208,8 @@ def proceso_gral(url):
             info_dolar = obtener_dolar(driver)
 
             print('Informacion extraida de la web y lista para subir a la base de datos:')
-            print()
-            print(info_dolar)
+            #print()
+            #print(info_dolar)
             print()
             print('scraping exitoso!')
             print()
