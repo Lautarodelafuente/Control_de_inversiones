@@ -3,9 +3,6 @@ SERVICE_ACOUNT_KEY.json
 SERVICE_ACCOUNT_GOOGLE.txt
 /Google/SERVICE_ACOUNT_KEY.json
 /Google/SERVICE_ACCOUNT_GOOGLE.txt
-/Lib/
-/Scripts/
-/Include/
 __pycache__/
 pyvenv.cfg
 /logs/
