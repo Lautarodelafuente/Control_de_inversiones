@@ -9,3 +9,4 @@ pyvenv.cfg
 /build/
 /dist/
 main.spec
+prueba.py
