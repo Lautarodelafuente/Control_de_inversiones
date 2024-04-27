@@ -10,6 +10,7 @@ import time
 import Base_de_datos_postgresql as bd
 import pandas as pd 
 import psycopg2 as sql
+from Services.scraping import iniciar_scraping
 
 
 #-----------------------------------------------------------------------------------------------------------------------------------------------#
@@ -31,7 +32,7 @@ def obtener_cedears(driver, url='https://www.rava.com/cotizaciones/cedears'):
     #print(Filas)
     #print()
 
-    print(f'Se encontraron {len(Filas)} registros en la tabla')
+    print(f'Se encontraron {len(Filas)} registros en la tabla de cedears')
     print()
 
     # Creamos una lista para guardar la informacion extraida de la web
@@ -126,7 +127,7 @@ def obtener_acciones_lider(driver,url='https://www.rava.com/cotizaciones/accione
     time.sleep(15)
 
     # Clickeamos el boton "GENERAL" para cambiar al grafico de cotizacion del cuadro general
-    driver.find_element(By.XPATH,'/html/body/div[2]/main/div/div/div[2]/div/div/ul/li[1]/a').click()
+    driver.find_element(By.XPATH,'/html/body/div[1]/main/div/div/div[2]/div/div/ul/li[1]/a').click()
 
     time.sleep(5)
 
@@ -140,7 +141,7 @@ def obtener_acciones_lider(driver,url='https://www.rava.com/cotizaciones/accione
     #print(Filas)
     #print()
 
-    print(f'Se encontraron {len(Filas_lider)} registros en la tabla')
+    print(f'Se encontraron {len(Filas_lider)} registros en la tabla acciones argentinas lideres')
     print()
 
     # Creamos una lista para guardar la informacion extraida de la web
@@ -214,7 +215,7 @@ def obtener_acciones_lider(driver,url='https://www.rava.com/cotizaciones/accione
 
         #print(cotizacion_acciones_arg_diaria2_lider[i])    
             
-    print(cotizacion_acciones_arg_diaria2_lider)
+    #print(cotizacion_acciones_arg_diaria2_lider)
 
     return cotizacion_acciones_arg_diaria2_lider
 
@@ -227,8 +228,8 @@ def obtener_acciones_general(driver,url='https://www.rava.com/cotizaciones/accio
     time.sleep(15)
     
     # Clickeamos el boton "GENERAL" para cambiar al grafico de cotizacion del cuadro general
-    driver.find_element(By.XPATH,'/html/body/div[2]/main/div/div/div[2]/div/div/ul/li[2]/a').click()
-
+    driver.find_element(By.XPATH,'/html/body/div[1]/main/div/div/div[2]/div/div/ul/li[2]/a').click()
+    
     time.sleep(5)
 
     # Ubicamos el elemento tbody de la tabla de dolar historico con XPATH (camino html para ubicar el elemento). Busca solo el contenido, no las etiquetas
@@ -241,7 +242,7 @@ def obtener_acciones_general(driver,url='https://www.rava.com/cotizaciones/accio
     #print(Filas)
     #print()
 
-    print(f'Se encontraron {len(Filas_general)} registros en la tabla')
+    print(f'Se encontraron {len(Filas_general)} registros en la tabla acciones argentinas general')
     print()
 
     cotizacion_acciones_arg_diaria_general = []
@@ -312,7 +313,7 @@ def obtener_acciones_general(driver,url='https://www.rava.com/cotizaciones/accio
         cotizacion_acciones_arg_diaria2_general[i].append('General')
         #print(cotizacion_acciones_arg_diaria2_general[i])            
 
-    print(cotizacion_acciones_arg_diaria2_general)
+    #print(cotizacion_acciones_arg_diaria2_general)
 
     return  cotizacion_acciones_arg_diaria2_general
 
@@ -325,8 +326,8 @@ def Carga_cedears_bd(cotizacion_cedear):
 
     # Creamos el cursos para poder impactar la base de datos
     cur = conn.cursor()
-    print('Conectado el cursor!')
-    print()
+    #print('Conectado el cursor!')
+    #print()
 
     # Creamos la sentencia SQL
     upsert_query = """
@@ -378,26 +379,27 @@ def Carga_cedears_bd(cotizacion_cedear):
         
         # Commit de los cambios
         conn.commit()
-        print('Listo el commit!')
-        print()
+        #print('Listo el commit!')
+        #print()
 
         # Cerramos el cursor
         cur.close()
-        print('Cerramos el cursor')
-        print()
+        #print('Cerramos el cursor')
+        #print()
 
     except Exception as e:
         print(f'Error al insertar los registros: {e}')  
         
         # Commit de los cambios
         conn.rollback()
-        print('Listo el rollback!')
-        print()
+        #print('Listo el rollback!')
+        #print()
 
         # Cerramos el cursor
         cur.close()
-        print('Cerramos el cursor')
-        print()      
+        #print('Cerramos el cursor')
+        #print()      
+
 
     print(f'Se revisaron, insertaron o updetearon {conteo} registros con exito')
     print()
@@ -411,8 +413,8 @@ def Carga_acciones_lider_bd(cotizacion_acciones_lider):
 
     # Creamos el cursos para poder impactar la base de datos
     cur = conn.cursor()
-    print('Conectado el cursor!')
-    print()
+    #print('Conectado el cursor!')
+    #print()
 
     # Creamos la sentencia SQL
     upsert_query = """
@@ -462,26 +464,26 @@ def Carga_acciones_lider_bd(cotizacion_acciones_lider):
         
         # Commit de los cambios
         conn.commit()
-        print('Listo el commit!')
-        print()
+        #print('Listo el commit!')
+        #print()
 
         # Cerramos el cursor
         cur.close()
-        print('Cerramos el cursor')
-        print()
+        #print('Cerramos el cursor')
+        #print()
 
     except Exception as e:
         print(f'Error al insertar los registros: {e}')  
         
         # Commit de los cambios
         conn.rollback()
-        print('Listo el rollback!')
-        print()
+        #print('Listo el rollback!')
+        #print()
 
         # Cerramos el cursor
         cur.close()
-        print('Cerramos el cursor')
-        print()      
+        #print('Cerramos el cursor')
+        #print()      
 
     print(f'Se revisaron, insertaron o updetearon {conteo} registros con exito')
     print()
@@ -496,8 +498,8 @@ def Carga_acciones_gral_bd(cotizacion_acciones_gral):
 
     # Creamos el cursos para poder impactar la base de datos
     cur = conn.cursor()
-    print('Conectado el cursor!')
-    print()
+    #print('Conectado el cursor!')
+    #print()
 
     # Creamos la sentencia SQL
     upsert_query = """
@@ -547,26 +549,26 @@ def Carga_acciones_gral_bd(cotizacion_acciones_gral):
         
         # Commit de los cambios
         conn.commit()
-        print('Listo el commit!')
-        print()
+        #print('Listo el commit!')
+        #print()
 
         # Cerramos el cursor
         cur.close()
-        print('Cerramos el cursor')
-        print()
+        #print('Cerramos el cursor')
+        #print()
 
     except Exception as e:
         print(f'Error al insertar los registros: {e}')  
         
         # Commit de los cambios
         conn.rollback()
-        print('Listo el rollback!')
-        print()
+        #print('Listo el rollback!')
+        #print()
 
         # Cerramos el cursor
         cur.close()
-        print('Cerramos el cursor')
-        print()      
+        #print('Cerramos el cursor')
+        #print()      
 
     print(f'Se revisaron, insertaron o updetearon {conteo} registros con exito')
     print()    
@@ -575,7 +577,7 @@ def Carga_acciones_gral_bd(cotizacion_acciones_gral):
    
 def proceso_general_rava():
     
-    # Seteamos las opciones de chrome para la navegacion (instanciamos la clase)
+    '''# Seteamos las opciones de chrome para la navegacion (instanciamos la clase)
     options = webdriver.ChromeOptions()
 
     # Le agregamos la opcion para que abra el chrome en modo incongnito
@@ -586,7 +588,9 @@ def proceso_general_rava():
 
     # Instalamos el driver de chrome atraves del manager y abrimos el chrome
     driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=options)
+'''
 
+    driver = iniciar_scraping()
     #-----------------------------------------------------------------------------------------------------------------------------------------------#
     # FUNCIONES
 
