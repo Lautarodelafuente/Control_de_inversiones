@@ -4,6 +4,7 @@ import DolarCCL_historico as CCL_hist
 import DolarCCL_API as CCL_api
 import Python_google_sheet
 import Cotizaciones_rava as CR
+import delete_files
 from datetime import datetime
 from os.path import exists 
 from os import system
@@ -34,6 +35,15 @@ with open(f'{path_logs}/{archivo_log}','w') as log:
     # CONEXION A LA BASE DE DATOS
     try:
         conn=bd.conexion_base_de_datos()
+        log.write(f'{datetime.now()}: EXITO! Conexion exitosa a la base de datos!\n')
+    except Exception as e:
+        log.write(f'{datetime.now()}: ERROR! Al tratar de conectarse a la base de datos: {e}\n')
+
+    #--------------------------------------------------------------------------------#
+    # CONEXION A LA BASE DE DATOS
+    try:
+        folder_path = "C:/Users/USER/.wdm/drivers/chromedriver/win64"
+        delete_files.delite_file_and_folders(folder_path)
         log.write(f'{datetime.now()}: EXITO! Conexion exitosa a la base de datos!\n')
     except Exception as e:
         log.write(f'{datetime.now()}: ERROR! Al tratar de conectarse a la base de datos: {e}\n')

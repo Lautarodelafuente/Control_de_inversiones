@@ -1,8 +1,7 @@
 .env
 SERVICE_ACOUNT_KEY.json
 SERVICE_ACCOUNT_GOOGLE.txt
-/Google/SERVICE_ACOUNT_KEY.json
-/Google/SERVICE_ACCOUNT_GOOGLE.txt
+/Google/
 __pycache__/
 pyvenv.cfg
 /logs/
@@ -10,3 +9,5 @@ pyvenv.cfg
 /dist/
 main.spec
 prueba.py
+/Scripts/
+/Extentions/

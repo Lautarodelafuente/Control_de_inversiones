@@ -4,7 +4,7 @@ Ver el siguiente video ==> https://www.youtube.com/watch?v=OTsBv9wMC6o
 
 - Abrir el path donde estan los archivos ==> cd path
 - activar el entorno virtual con ==> .\Scripts\activate
-- Actualizar la libreria ==> pip install -u pyinstaller
+- Actualizar la libreria ==> pip install pyinstaller
 - volver a path donde estan los archivos ==> cd path
 - correr el siguiente codigo donde main.py es el archivo principal del script: ==> pyinstaller --onefile main.py
 
