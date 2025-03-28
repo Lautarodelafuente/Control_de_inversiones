@@ -1,167 +1,98 @@
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service as ChromeService
-from webdriver_manager.chrome import ChromeDriverManager
+import time
+import logging
+
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
-import Base_de_datos_postgresql as bd
-import psycopg2 as pg
-import time
+
+import bd_postgresql as bd
+from Services.scraping import iniciar_scraping
+
+
+logger = logging.getLogger(__name__)
 
 #-----------------------------------------------------------------------------------------------------------------------------------------------#
 
 def obtener_dolar(driver):
 
-    # Ubicamos el elemento tbody de la tabla de dolar historico con XPATH (camino html para ubicar el elemento). Busca solo el contenido, no las etiquetas
-    elemento_tabla = driver.find_element(By.XPATH, '//tbody[@class="general-historical__tbody tbody"]')
-    #print(elemento_tabla)
-    #print()
+    try:
+        logger.info("Buscando la tabla de cotizaciones del dolar...")
+        # Ubicamos el elemento tbody de la tabla de dolar historico con XPATH (camino html para ubicar el elemento). Busca solo el contenido, no las etiquetas
+        elemento_tabla = driver.find_element(By.XPATH, '//tbody[@class="general-historical__tbody tbody"]')
 
-    # Extraemos los elementos del body de la tabla correspondiente a cada uno de los registros de la misma. (con el punto le indicamos que tiene que buscar dentro del tbody y no en todo el html)
-    elemento_tabla_dolar = elemento_tabla.find_elements(By.XPATH, './/tr')
-    #print(elemento_tabla_dolar)
-    #print()
+        # Extraemos los elementos del body de la tabla correspondiente a cada uno de los registros de la misma. (con el punto le indicamos que tiene que buscar dentro del tbody y no en todo el html)
+        elemento_tabla_dolar = elemento_tabla.find_elements(By.XPATH, './/tr')
 
-    print(f'Se encontraron {len(elemento_tabla_dolar)} registros en la tabla')
-    print()
+        logger.info(f"Se encontraron {len(elemento_tabla_dolar)} registros en la tabla.")
 
-    # Creamos una lista para guardar la informacion extraida de la web
-    dolar_historico_base = []
+        # Creamos una copia para manipularla con libertad y no generar errores a futuro
+        dolar_historico = []
 
-    # Para cada elemento o fila le pedimos qe nos extraiga el texto con .text y separamos el string por espacios para que nos deje dos elementos correspondientes a fecha y referencia (precio del dolar). Luego lo agregamos a la lista "dolar_historico_base" que creamos anteriormente.
-    for fila in elemento_tabla_dolar:
-        texto = fila.text
-        lista_separada = texto.split()
-        dolar_historico_base.append(lista_separada)
+        # Del campo referencia cambiamos la coma ',' por punto '.' para luego modificar el tipo de dato de str a float y guardamos la info en la variable dolar_historico. En este punto ya tenemos lista la informacion para pasarla a la base de datos
+        for fila in elemento_tabla_dolar:
+            fecha, valor = fila.text.split()
+            dolar_historico.append([fecha, float(valor.replace(",", "."))])
 
-    #print(dolar_historico_base)
-    #print()
+        logger.info("Datos de la tabla procesados correctamente.")
 
-    # Creamos una copia para manipularla con libertad y no generar errores a futuro
-    dolar_historico = dolar_historico_base.copy()
+    except Exception as e:
+        logger.error(f"Error al obtener datos del dolar: {e}")
+        dolar_historico = []
 
-    # Del campo referencia cambiamos la coma ',' por punto '.' para luego modificar el tipo de dato de str a float y guardamos la info en la variable dolar_historico. En este punto ya tenemos lista la informacion para pasarla a la base de datos
-    for i in range(len(dolar_historico_base)):
-        dolar_historico[i][1] = float(dolar_historico_base[i][1].replace(",","."))
-        #print(dolar_historico[i][1])
-
-    #print(dolar_historico)
-    print('Lista la correccion del tipo de dato de la referencia')
-    print()
-
-    # Cerramos el driver de chrome
-    driver.close()
-
-    print('Cerramos el driver!')
-    print()
+    finally:
+        driver.quit()
+        logger.info("Driver de Selenium cerrado correctamente.")
 
     return dolar_historico
 
 #-----------------------------------------------------------------------------------------------------------------------------------------------#
 
-def ultima_fecha(conn = bd.conexion_base_de_datos()):
+def ultima_fecha():
+
+    query = "SELECT MAX(fecha)::date FROM dolar_ccl_historico;"
     
-    # Creamos el cursos para poder impactar la base de datos
-    cur = conn.cursor()
-    print('Conectado el cursor!')
-    print()
-
-    select_max_fecha = '''select max(fecha)::date from dolar_ccl_historico dch ;'''
-
     try:
-        cur.execute(select_max_fecha)
-
-        ultima_fecha_bd_dolar_ccl_historico = cur.fetchone()
-
-        for fecha in ultima_fecha_bd_dolar_ccl_historico:
-            ultima_fecha = fecha.strftime('%d/%m/%Y')
-
-        # Cerramos el cursor
-        cur.close()
-        print('Cerramos el cursor')
-        print()
+        with bd.conexion_base_de_datos() as conn, conn.cursor() as cur:
+            cur.execute(query)
+            ultima_fecha_bd = cur.fetchone()[0]
+            
+            if ultima_fecha_bd:
+                ultima_fecha = ultima_fecha_bd.strftime('%d/%m/%Y')
+                logger.info(f"Última fecha registrada en BD: {ultima_fecha}")
+            else:
+                ultima_fecha = "01/01/2000"  # Fecha por defecto si no hay registros en la BD
 
     except Exception as e:
-        print(f'Error al buscar la ultima fecha de la tabla dolar_ccl_historico: {e}') 
-
-        # Cerramos el cursor
-        cur.close()
-        print('Cerramos el cursor')
-        print()
+        logger.error(f"Error al obtener la última fecha de la BD: {e}")
+        ultima_fecha = "01/01/2000"
 
     return ultima_fecha
 
-#-----------------------------------------------------------------------------------------------------------------------------------------------#
-
-def info_dolar_to_database(info_dolar,conn):
-
-    # Creamos el cursos para poder impactar la base de datos
-    cur = conn.cursor()
-    print('Conectado el cursor!')
-    print()
-
-    # Creamos la sentencia SQL
+#--------------------------------------------------------------------------------#
+# INSERTAR DATOS EN LA BASE DE DATOS
+def info_dolar_to_database(info_dolar):
     upsert_query = """
-        INSERT INTO public.dolar_ccl_historico
-        (fecha, referencia,fecha_actualizacion)
-        values (%s,%s,now())
-        ON CONFLICT (fecha)
-        DO NOTHING;
+        INSERT INTO public.dolar_ccl_historico (fecha, referencia, fecha_actualizacion)
+        VALUES (%s, %s, NOW())
+        ON CONFLICT (fecha) DO NOTHING;
     """
-
-    # Hacemos un bucle for para asociar cada fila con la sentencia sql
-    conteo = 0
-
     try:
-        for data in info_dolar:
-            cur.execute(upsert_query, data)
-            conteo += 1
-            #print(data)
-            #print(conteo)
-            #print('Insert realizado con exito!')  
-        
-        # Commit de los cambios
-        conn.commit()
-        print('Listo el commit!')
-        print()
-
-        # Cerramos el cursor
-        cur.close()
-        print('Cerramos el cursor')
-        print()
+        with bd.conexion_base_de_datos() as conn, conn.cursor() as cur:
+            cur.executemany(upsert_query, info_dolar)
+            conn.commit()
+            logger.info(f"{len(info_dolar)} registros insertados o actualizados en la BD.")
 
     except Exception as e:
-        print(f'Error al insertar los registros: {e}')  
-        
-        # Commit de los cambios
-        conn.rollback()
-        print('Listo el rollback!')
-        print()
-
-        # Cerramos el cursor
-        cur.close()
-        print('Cerramos el cursor')
-        print()      
-
-    print(f'Se revisaron, insertaron o updetearon {conteo} registros con exito')
-    print()
+        logger.error(f"Error al insertar registros en la BD: {e}")
     
 #-----------------------------------------------------------------------------------------------------------------------------------------------#
 
 def proceso_gral(url):
 
-    # Seteamos las opciones de chrome para la navegacion (instanciamos la clase)
-    options = webdriver.ChromeOptions()
+    logger.info("Iniciando proceso de scraping...")
 
-    # Le agregamos la opcion para que abra el chrome en modo incongnito
-    options.add_argument('--incognito')
-
-    # Maximizar el navegador
-    options.add_argument("--start-maximized")
-
-    # Instalamos el driver de chrome atraves del manager y abrimos el chrome
-    driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=options)
+    driver = iniciar_scraping()
 
     # Con el driver previamente cargado, se abre chrome, y le pasamos la url que queremos que entre 
     driver.get(url)
@@ -176,67 +107,58 @@ def proceso_gral(url):
         
         # Buscamos la fecha mas reciente de nuestra base de datos para usarla como fecha de inicio en la pagina
         ultima_fecha_registrada = ultima_fecha()
-
-        #print(ultima_fecha_registrada)
         
         # Configuramos la fecha desde
-        WebDriverWait(driver, delay).until(EC.element_to_be_clickable((By.XPATH, "//div[@class='general-historical__config config']/input[@class='general-historical__datepicker datepicker desde form-control']"))).send_keys(ultima_fecha_registrada)
-        print('Se modifico la "FECHA DESDE" con exito!')
-        print()
+        WebDriverWait(driver, delay).until(
+            EC.element_to_be_clickable((By.XPATH, "//div[@class='general-historical__config config']/input[@class='general-historical__datepicker datepicker desde form-control']"))
+            ).send_keys(ultima_fecha_registrada)
+        logger.info("Fecha de consulta modificada con exito.")
 
         time.sleep(10)
 
-
         # Clickeamos el boton "VER DATOS" para hacer efectiva nuestra seleccion
         driver.find_element(By.XPATH,'//button[@class="general-historical__button boton"]').click()
-        print('Click en "VER DATOS"')
-        print()
+        logger.info("Click en VER DATOS realizado.")
 
         time.sleep(10)
 
         # Introducimos una demora en el proceso hasta que ubique el elemento deseado para luego continuar
-        tabla = WebDriverWait(driver,delay).until(EC.presence_of_element_located((By.XPATH,'//tbody[@class="general-historical__tbody tbody"]')))
-        print('La pagina cargo con exito!')
-        print()
+        tabla = WebDriverWait(driver,delay).until(
+            EC.presence_of_element_located((By.XPATH,'//tbody[@class="general-historical__tbody tbody"]')))
+        logger.info("La pagina cargo correctamente.")
 
         time.sleep(5)
 
         # Esperamos tener respuesta del elemento "tabla" o que el programa lo encuentre
-        if tabla:
+        info_dolar = obtener_dolar(driver)
 
-            # Obtenemos la informacion de la funcion que creamos anteriormente
-            info_dolar = obtener_dolar(driver)
-
-            print('Informacion extraida de la web y lista para subir a la base de datos:')
-            #print()
-            #print(info_dolar)
-            print()
-            print('scraping exitoso!')
-            print()
-
-            # Si info_dolar no esta vacio corremos el resto del proceso
-            if info_dolar != []:
-                info_dolar_to_database(info_dolar,bd.conexion_base_de_datos())
-            else:
-                print('No se encontraron resultados!')
-                print()
+        if info_dolar:
+            info_dolar_to_database(info_dolar)
+        else:
+            logger.warning("No se encontraron registros nuevos.")
 
     except TimeoutException:
-        print('La pagina tardo demasiado en cargar')
-        print()
-        info_dolar = []
-
+        logger.error("Error: la pagina tardo demasiado en cargar.")
     except Exception as e:
-        print(f'Ocurrio un error en el proceso principal: {e}')  
-        print()
+        logger.error(f"Ocurrio un error inesperado en el proceso: {e}")
     
+
+
 #-----------------------------------------------------------------------------------------------------------------------------------------------#
 
 if __name__ == "__main__":
+
+    #--------------------------------------------------------------------------------#
+    # CONFIGURACIoN DE LOGGING
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=[logging.StreamHandler()] 
+    )
     
-    print('iniciando proceso...')
+    logging.info("Iniciando script...")
 
     # Iniciamos el proceso pasandole el link de la url que queremos scrapear
     proceso_gral('https://www.ambito.com/contenidos/dolar-cl-historico.html')
 
-    print('Fin del Proceso')
+    logging.info("Fin del proceso.")

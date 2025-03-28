@@ -1,7 +1,9 @@
 import psycopg2 as pg
 import os
+import logging
 from dotenv import load_dotenv
 
+logger = logging.getLogger(__name__)
 
 def conexion_base_de_datos():
 
@@ -20,20 +22,22 @@ def conexion_base_de_datos():
     # Creamos la coneccion a la base de datos
     try:
         conn = pg.connect(**connection)
-        print('Conexion realizada con exito!')
-        print()
+        logger.info("Conexion a la BD realizada con exito.")
+        return conn
     except Exception as e:
-        print(f'Hubo un error al conectarse: {e}')
-        print()
-
-    # Si todo sale bien nos retorna la conexion para usarla mas adelante
-    return conn    
+        logger.error(f"Error al conectarse a la base de datos: {e}")
+        return None  # Retorna None si falla la conexión 
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=[logging.StreamHandler()]
+    )
+    
     conn = conexion_base_de_datos()
     
-    # Si la conexion esta abierta la cerramos
-    if conn:
+    if conn:  # Solo cierra la conexión si fue exitosa
         conn.close()
-        print('Conexion cerrada')
+        logger.info("Conexion a la BD cerrada.")

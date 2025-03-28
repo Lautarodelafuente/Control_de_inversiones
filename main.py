@@ -1,17 +1,17 @@
-import API_IOL as a_iol
-import Base_de_datos_postgresql as bd
-import DolarCCL_historico as CCL_hist
-import DolarCCL_API as CCL_api
-import Python_google_sheet
-import Cotizaciones_rava as CR
-import delete_files
-from datetime import datetime
-from os.path import exists 
-from os import system
-import os 
+import logging
+import os
+import sys
 from dotenv import load_dotenv
+from datetime import datetime
 
-
+import iol_api as a_iol
+import bd_postgresql as bd
+import dolarccl_historico as CCL_hist
+import dolarccl_api as CCL_api
+import python_google_sheet
+import cot_diaria_rava as CR
+from Services import delete_files
+from Services.scraping import iniciar_scraping
 
 # Cargamos las variables de entorno del archivo .env
 load_dotenv()
@@ -22,101 +22,124 @@ load_dotenv()
 inicio = datetime.now()
 log_str = inicio.strftime('%Y%m%d_%H%M%S')
 archivo_log = f'log_control_inversiones_{log_str}.log'
-path_logs = os.getenv('Carpeta_Logs')
+path_logs = os.getenv('Carpeta_Logs', 'logs')
 
-if not exists(path_logs):
-    system('mkdir logs')
+# Crear carpeta de logs si no existe
+os.makedirs(path_logs, exist_ok=True)
 
-with open(f'{path_logs}/{archivo_log}','w') as log:
+ruta_log = os.path.join(path_logs, archivo_log)
 
-    log.write(f'{datetime.now()}: Iniciando ejecucion del programa...\n')
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(ruta_log),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
 
-    #--------------------------------------------------------------------------------#
-    # CONEXION A LA BASE DE DATOS
-    try:
-        conn=bd.conexion_base_de_datos()
-        log.write(f'{datetime.now()}: EXITO! Conexion exitosa a la base de datos!\n')
-    except Exception as e:
-        log.write(f'{datetime.now()}: ERROR! Al tratar de conectarse a la base de datos: {e}\n')
+logging.info("Iniciando ejecucion del programa...")
 
-    #--------------------------------------------------------------------------------#
-    # CONEXION A LA BASE DE DATOS
-    try:
-        folder_path = "C:/Users/USER/.wdm/drivers/chromedriver/win64"
-        delete_files.delite_file_and_folders(folder_path)
-        log.write(f'{datetime.now()}: EXITO! Conexion exitosa a la base de datos!\n')
-    except Exception as e:
-        log.write(f'{datetime.now()}: ERROR! Al tratar de conectarse a la base de datos: {e}\n')
+#--------------------------------------------------------------------------------#
+# CONEXION A LA BASE DE DATOS
+conn = None
+try:
+    conn = bd.conexion_base_de_datos()
+    logging.info("EXITO! Conexion exitosa a la base de datos!")
+except Exception as e:
+    logging.error(f"ERROR! Al tratar de conectarse a la base de datos: {e}")
 
-    #--------------------------------------------------------------------------------#
-    # PROCESOS DOLARCCL
+#--------------------------------------------------------------------------------#
+# Limpieza de cache
+logging.info('')
+logging.info(f'INICIO - LIMPIEZA DE CACHE...')
+try:
+    folder_path = "C:/Users/USER/.wdm/drivers/chromedriver/win64"
+    delete_files.delite_files_and_folders(folder_path)
+    logging.info("EXITO! Cache del driver borrada!")
+except Exception as e:
+    logging.error(f"ERROR! Al tratar de borrar cache del driver: {e}")
 
-    # Iniciamos el proceso pasandole el link de la url que queremos scrapear sobre dolarCCL
-    try:
-        CCL_hist.proceso_gral('https://www.ambito.com/contenidos/dolar-cl-historico.html')
-        log.write(f'{datetime.now()}: EXITO! Carga de datos DolarCCL historico exitosa!\n')
-    except Exception as e:
-        log.write(f'{datetime.now()}: ERROR! Al tratar de cargar los datos de DolarCCL historico: {e}\n')
+#--------------------------------------------------------------------------------#
+# PROCESOS DOLARCCL
+logging.info('')
+logging.info(f'INICIO - CARGA DOLARCCL HISTORICO...')
+# Iniciamos el proceso pasandole el link de la url que queremos scrapear sobre dolarCCL
+try:
+    CCL_hist.proceso_gral('https://www.ambito.com/contenidos/dolar-cl-historico.html')
+    logging.info("EXITO! Carga de datos DolarCCL historico exitosa!")
+except Exception as e:
+    logging.error(f"ERROR! Al tratar de cargar los datos de DolarCCL historico: {e}")
 
+logging.info('')
+logging.info(f'INICIO - CARGA DOLARCCL HOY...')
+# Funcion que trae el dato del dolarCCL actual
+try:
+    CCL_api.insert_dolarCCL_api()
+    logging.info("EXITO! Carga de datos DolarCCL API diaria exitosa!")
+except Exception as e:
+    logging.error(f"ERROR! Al tratar de cargar los datos de DolarCCL API diario: {e}")
 
-    # Funcion que trae el dato del dolarCCL actual
-    try:
-        CCL_api.insert_dolarCCL_api()
-        log.write(f'{datetime.now()}: EXITO! Carga de datos DolarCCL API diario exitosa!\n')
-    except Exception as e:
-        log.write(f'{datetime.now()}: ERROR! Al tratar de cargar los datos de DolarCCL API diario: {e}\n')
-
-    #--------------------------------------------------------------------------------#
-    # PROCESOS IOL
-
+#--------------------------------------------------------------------------------#
+# PROCESOS IOL
+logging.info('')
+logging.info(f'INICIO - CARGA DATOS IOL...')
+if conn:
     # Envia a la base de datos la informacion de operciones historicas de IOL
     try:
-        a_iol.operaciones_historicas_to_database(operaciones_historicas=a_iol.operaciones(),conn=conn)
-        log.write(f'{datetime.now()}: EXITO! Carga de datos Operaciones IOL historicas exitosa!\n')
+        a_iol.operaciones_historicas_to_database(operaciones_historicas=a_iol.operaciones(), conn=conn)
+        logging.info("EXITO! Carga de datos de Operaciones IOL historicas exitosa!")
     except Exception as e:
-        log.write(f'{datetime.now()}: ERROR! Al tratar de cargar los datos de Operaciones IOL historicas: {e}\n')
-    
-    
+        logging.error(f"ERROR! Al tratar de cargar los datos de Operaciones IOL historicas: {e}")
+
     # Envia a la base de datos la informacion de portafolio actual de IOL
     try:
-        a_iol.portafolio_actual_to_database(df_portafolio_actual=a_iol.portafolio(),conn=conn)
-        log.write(f'{datetime.now()}: EXITO! Carga de datos Portafolio IOL exitosa!\n')
+        a_iol.portafolio_actual_to_database(df_portafolio_actual=a_iol.portafolio(), conn=conn)
+        logging.info("EXITO! Carga de datos del Portafolio IOL exitosa!")
     except Exception as e:
-        log.write(f'{datetime.now()}: ERROR! Al tratar de cargar los datos de Portafolio IOL: {e}\n')
+        logging.error(f"ERROR! Al tratar de cargar los datos del Portafolio IOL: {e}")
 
+#--------------------------------------------------------------------------------#
+# PROCESOS COTIZACION RAVA
+logging.info('')
+logging.info(f'INICIO - CARGA COTIZACIONES RAVA...')
+# Envia a la base de datos la informacion de Cotizaciones rava bursatil
+try:
+    CR.proceso_general_rava()
+    logging.info("EXITO! Carga de datos de Cotizaciones Rava exitosa!")
+except Exception as e:
+    logging.error(f"ERROR! Al tratar de cargar los datos de Cotizaciones Rava: {e}")
 
-    #--------------------------------------------------------------------------------#
-    # PROCESOS COTIZACION RAVA
+#--------------------------------------------------------------------------------#
+# PROCESOS GOOGLE SHEETS
+logging.info('')
+logging.info(f'INICIO - CARGA DATOS EN GOOGLE SHEETS...')
+# Cargamos los datos del dolar en la planilla de google sheets
+try:
+    python_google_sheet.update(rango_hoja='CCL!A2', valores=python_google_sheet.dolar_historico_bd())
+    logging.info("EXITO! Carga de datos de DolarCCL en Google Sheets exitosa!")
+except Exception as e:
+    logging.error(f"ERROR! Al tratar de cargar los datos de DolarCCL en Google Sheets: {e}")
 
-    # Envia a la base de datos la informacion de Cotizaciones rava bursatil
+try:
+    python_google_sheet.update(rango_hoja='Cotizacion acciones Rava!A2', valores=python_google_sheet.cotizacion_rava_bd())
+    logging.info("EXITO! Carga de cotizaciones Rava en Google Sheets exitosa!")
+except Exception as e:
+    logging.error(f"ERROR! Al tratar de cargar los datos de cotizaciones Rava en Google Sheets: {e}")
+
+# --------------------------------------------------------------------------------#
+# CERRAMOS LA CONEXIoN A LA BASE DE DATOS
+if conn:
     try:
-        CR.proceso_general_rava()
-        log.write(f'{datetime.now()}: EXITO! Carga de datos Cotizaciones rava exitosa!\n')
+        conn.close()
+        logging.info(f'EXITO! Conexion a la base de datos cerrada correctamente.')
     except Exception as e:
-        log.write(f'{datetime.now()}: ERROR! Al tratar de cargar los datos de Cotizaciones rava: {e}\n')
-    
-    
-    #--------------------------------------------------------------------------------#
-    # PROCESOS GOOGLE SHEETS
+        logging.error(f"ERROR! Al cerrar la conexion a la base de datos: {e}")
 
-    # Cargamos los datos del dolar en la planilla de google sheets
-    try:
-        Python_google_sheet.update(rango_hoja='CCL!A2',valores=Python_google_sheet.dolar_historico_bd())
-        log.write(f'{datetime.now()}: EXITO! Carga de datos DolarCCL en Google Sheets exitosa!\n')
-    except Exception as e:
-        log.write(f'{datetime.now()}: ERROR! Al tratar de cargar los datos de DolarCCL en Google Sheets: {e}\n')
-
-    # Cargamos los datos de cotizaciones en la planilla de google sheets
-    try:
-        Python_google_sheet.update(rango_hoja='Cotizacion acciones Rava!A2',valores=Python_google_sheet.cotizacion_rava_bd())
-        log.write(f'{datetime.now()}: EXITO! Carga de cotizaciones rava en Google Sheets exitosa!\n')
-    except Exception as e:
-        log.write(f'{datetime.now()}: ERROR! Al tratar de cargar los datos de cotizaciones rava en Google Sheets: {e}\n')
-
-
-    final = datetime.now()
-    delta = final - inicio
-
-    log.write(f'{datetime.now()}: Tiempo de ejecucion: {delta}\n')
-    log.write(f'{datetime.now()}: Trabajo finalizado\n')        
+# --------------------------------------------------------------------------------#
+# TIEMPO TOTAL DE EJECUCIoN
+delta = datetime.now() - inicio
+logging.info('')
+logging.info(f"Tiempo de ejecucion: {delta}")
+logging.info("Trabajo finalizado")    
 
