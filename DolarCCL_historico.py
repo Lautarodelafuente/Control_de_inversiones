@@ -100,7 +100,7 @@ def proceso_gral(url):
     time.sleep(10)
 
     # Creamos la variable demora
-    delay = 10
+    delay = 20
 
     # Corremos el proceso
     try:
@@ -114,13 +114,12 @@ def proceso_gral(url):
             ).send_keys(ultima_fecha_registrada)
         logger.info("Fecha de consulta modificada con exito.")
 
-        time.sleep(10)
-
         # Clickeamos el boton "VER DATOS" para hacer efectiva nuestra seleccion
-        driver.find_element(By.XPATH,'//button[@class="general-historical__button boton"]').click()
+        WebDriverWait(driver, delay).until(
+            EC.element_to_be_clickable((By.XPATH,'/html/body/main/div/div[1]/div[1]/div/div[2]/div[1]/button'))).click()
         logger.info("Click en VER DATOS realizado.")
 
-        time.sleep(10)
+        #//button[@class="general-historical__button boton"]
 
         # Introducimos una demora en el proceso hasta que ubique el elemento deseado para luego continuar
         tabla = WebDriverWait(driver,delay).until(
