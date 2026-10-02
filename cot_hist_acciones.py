@@ -1,4 +1,5 @@
 import logging
+from pydoc import html
 import time
 import os
 
@@ -26,7 +27,21 @@ def obtener_tickers(tipo):
     
     tipo = tipo.upper()
 
-    query_ticker_acciones = '''SELECT DISTINCT simbolo FROM iol_portafolio_actual WHERE tipo = %s;'''
+    query_ticker_acciones = """
+            select
+                distinct ioh.simbolo
+            from
+                iol_operaciones_historicas ioh
+                join (
+                        select distinct ticker , tipo_accion, 'ACCIONES' as tipo from rava_cotizacion_acciones_arg_gral rcaag 
+                        union all
+                        select distinct ticker , tipo_accion, 'ACCIONES' as tipo from rava_cotizacion_acciones_arg_lider rcaal 
+                        union all 
+                        select distinct ticker, 'Cedear' as tipo_accion, 'CEDEARS' as tipo from rava_cotizacion_cedear_diaria rccd 
+                    ) x on x.ticker = ioh.simbolo 
+            where x.tipo = %s"""
+    
+    '''SELECT DISTINCT simbolo FROM iol_portafolio_actual WHERE tipo = %s;'''
 
     try:
         with conn.cursor() as cur:  # Manejo automático del cursor
@@ -106,6 +121,20 @@ def cot_accion_hist(ticker):
 def obtener_fecha_inicio(conn, ticker):
     """ Obtiene la fecha de inicio de inversión para el ticker. """
     query = """
+        SELECT
+            GREATEST(MIN(ioh.fechaorden)::date, COALESCE(MAX(c.fecha), '2019-08-01')) as fecha_inicio,
+            case when ipa.simbolo is not null then now()::date else max(ioh.fechaorden)::date end ultima_fecha
+        FROM 
+            iol_operaciones_historicas ioh 
+            LEFT JOIN cotizacion_historica_accion c ON c.ticker = ioh.simbolo 
+            left join iol_portafolio_actual ipa on ipa.simbolo = ioh.simbolo 
+        WHERE 
+            ioh.simbolo = %s
+        group by 
+            ipa.simbolo
+        """
+    
+    """
         SELECT 
             GREATEST(MIN(fechaorden)::date, COALESCE(MAX(c.fecha), '2019-08-01'))
         FROM iol_operaciones_historicas ioh 
@@ -115,9 +144,11 @@ def obtener_fecha_inicio(conn, ticker):
     try:
         with conn.cursor() as cur:
             cur.execute(query, (ticker,))
-            return (pd.to_datetime(cur.fetchone()[0]) - pd.Timedelta(days=7))
+            result = cur.fetchone()
+            if result:
+                return (pd.to_datetime(result[0]) - pd.Timedelta(days=7)) , (pd.to_datetime(result[1]) - pd.Timedelta(days=7))
     except Exception as e:
-        logger.error(f"Error al obtener fecha de inicio para {ticker}: {e}")
+        logger.error(f"Error al obtener fecha de inicio y fin para {ticker}: {e}")
         return pd.to_datetime('2019-08-01')
     
 
@@ -138,9 +169,9 @@ def cot_accion_hist_bd(ticker):
         df = pd.read_csv(file_path, usecols=["especie", "fecha", "apertura", "maximo", "minimo", "cierre", "volumen"])
         df["fecha"] = pd.to_datetime(df["fecha"]) 
         
-        fecha_inicio = obtener_fecha_inicio(conn, ticker)
+        fecha_inicio,ultima_fecha  = obtener_fecha_inicio(conn, ticker)
 
-        datos = [tuple(x) for x in (df[df["fecha"]>= fecha_inicio]).to_numpy()]
+        datos = [tuple(x) for x in (df[(df["fecha"]>= fecha_inicio) & (df["fecha"]<= ultima_fecha)]).to_numpy()]
 
         with conn.cursor() as cur:
             cur.execute("""
@@ -220,16 +251,19 @@ def cot_cedear_hist(tickers):
 
             driver.get(url)
 
-            delay = 20
+            delay = 40
 
             if yahoo_cookies == 0:
                 # Esperar a que el botón de cookies sea clickeable y hacer clic en él
                 logger.info("Esperando el botón de cookies...")
                 try:
-                    cookies = WebDriverWait(driver, delay).until(
+                    """cookies = WebDriverWait(driver, delay).until(
                         EC.element_to_be_clickable(
-                            (By.XPATH, '//*[@id="consent-page"]/div/div/div/form/div[2]/div[2]/button[2]')
+                            (By.XPATH, '//*[@id="consent-page"]/div/div/div/form/div[2]/div[2]/button[1]')
                         )
+                    ) """
+                    cookies = WebDriverWait(driver, delay).until(
+                        EC.element_to_be_clickable((By.ID, "didomi-notice-disagree-button"))
                     )
                     if cookies:
                         cookies.click()
@@ -239,23 +273,24 @@ def cot_cedear_hist(tickers):
                 except TimeoutException:
                     logger.warning(f"No se encontró el botón de cookies para {ticker}.")
 
-            time.sleep(5)
-
+            time.sleep(15)
+            print("paso cookies")
             WebDriverWait(driver, delay).until(
                 EC.element_to_be_clickable(
-                    (By.XPATH,'/html/body/div[2]/main/section/section/section/article/div[1]/div[1]/div[1]/button')
-                )).click()
-            
+                    (By.CLASS_NAME, 'tertiary-btn.fin-size-small.menuBtn.rounded.yf-r7dg9i')
+                )).click() 
+            print("paso menu")
             # Configuramos la fecha desde
             WebDriverWait(driver, delay).until(
-                EC.element_to_be_clickable((By.XPATH, "/html/body/div[2]/main/section/section/section/article/div[1]/div[1]/div[1]/div/div/section/div[2]/input[1]"))
-            ).send_keys(fecha_inicio.strftime('%d-%m-%Y'))
-            
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "input[type='date'][name='startDate'].inputClass.yf-2esekx"))
+            ).send_keys(fecha_inicio.strftime('%d-%m-%Y')) 
+            print("paso fecha")
+            # Clickeamos el boton "HECHO" para hacer efectiva nuestra seleccion 
             time.sleep(delay)
 
             if driver.find_elements(By.XPATH, '/html/body/div[2]/main/section/section/section/article/div[1]/div[1]/div[1]/div/div/section[contains(., "La fecha no puede ser anterior a")]'):
                 msj_fecha_inicio = driver.find_elements(By.XPATH, '/html/body/div[2]/main/section/section/section/article/div[1]/div[1]/div[1]/div/div/section[contains(., "La fecha no puede ser anterior a")]')
-
+                print("paso validacion fecha")
                 logger.warning(f"Fecha de inicio {fecha_inicio} no válida para {ticker}.")
 
                 for msg in msj_fecha_inicio:
@@ -416,14 +451,13 @@ def cot_cedear_hist_bd(datos_historicos):
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     
-    tickers_accion = obtener_tickers('ACCIONES')
+    #tickers_accion = obtener_tickers('ACCIONES')
 
-    for ticker in tickers_accion:
+    """for ticker in tickers_accion:
         cot_accion_hist(ticker)
         cot_accion_hist_bd(ticker)
-    
+    """
     tickers_cedear = obtener_tickers('CEDEARS')
 
     cot_cedear_hist_bd(cot_cedear_hist(tickers_cedear))
 
-    

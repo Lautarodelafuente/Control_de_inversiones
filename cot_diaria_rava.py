@@ -1,9 +1,11 @@
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 import time
 import bd_postgresql as bd
 from Services.scraping import iniciar_scraping
 import logging
-
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +18,26 @@ def convertir_a_float(valor):
     except ValueError:
         #logging.warning(f"Valor no numerico encontrado: {valor}")
         return valor
+    
+def convertir_volumen(valor):
+    if valor == '-':
+        return 0
+    valor = valor.strip()
+    multiplicador = 1
+    if valor.endswith('MM'):
+        multiplicador = 1_000_000
+        valor = valor[:-2].strip()
+    elif valor.endswith('M'):
+        multiplicador = 1_000
+        valor = valor[:-1].strip()
+    elif valor.endswith('K'):
+        multiplicador = 1_000
+        valor = valor[:-1].strip()
+    try:
+        numero = float(valor.replace(".", '').replace(",", "."))
+        return int(round(numero * multiplicador))
+    except ValueError:
+        return valor
         
 #-----------------------------------------------------------------------------------------------------------------------------------------------#
 
@@ -26,131 +48,166 @@ def obtener_cedears(driver, url='https://www.rava.com/cotizaciones/cedears'):
 
     time.sleep(15)
 
+    '''driver.save_screenshot('debug_cedears.png')
+    with open('debug_cedears.html', 'w', encoding='utf-8') as f:
+        f.write(driver.page_source)'''
+
     # Ubicamos el elemento tbody de la tabla de dolar historico con XPATH (camino html para ubicar el elemento). Busca solo el contenido, no las etiquetas
     try:
-        elemento_tabla = driver.find_element(By.XPATH, '//table[@id="table"]')
+        # 1. Esperar a que el iframe exista y cambiar el contexto hacia él
+        WebDriverWait(driver, 20).until(
+            EC.frame_to_be_available_and_switch_to_it((By.ID, "embed-frame-cedears"))
+        )
+
+        # 2. Ahora sí, buscar la tabla DENTRO del iframe
+        elemento_tabla = WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.XPATH, '//table'))
+        )
+        print(f'Elemento tabla encontrado: {elemento_tabla}')
+
+    except TimeoutException as e:
+        logger.error(f"No se pudo encontrar la tabla (timeout): {e}")
+        driver.switch_to.default_content()
+        return []
     except Exception as e:
         logger.error(f"No se pudo encontrar la tabla: {e}")
+        driver.switch_to.default_content()
         return []
 
-    # Extraemos los elementos del body de la tabla correspondiente a cada uno de los registros de la misma. (con el punto le indicamos que tiene que buscar dentro del tbody y no en todo el html)
-    filas = elemento_tabla.find_elements(By.XPATH, './/tr')
+    '''with open('debug_tabla_iframe.html', 'w', encoding='utf-8') as f:
+        f.write(elemento_tabla.get_attribute('outerHTML'))
 
+    filas_debug = elemento_tabla.find_elements(By.XPATH, './/tr')
+    with open('debug_fila_ejemplo.html', 'w', encoding='utf-8') as f:
+        f.write(filas_debug[6].get_attribute('outerHTML'))  # fila índice 2 para saltar el header'''
+
+    # Extraemos los elementos del body de la tabla correspondiente a cada uno de los registros de la misma. (con el punto le indicamos que tiene que buscar dentro del tbody y no en todo el html)
+    filas = elemento_tabla.find_elements(By.XPATH, './/tbody/tr')
     logger.info(f'Se encontraron {len(filas)} registros en la tabla de cedears')
 
-    # Creamos una lista para guardar la informacion extraida de la web
     cotizacion_cedear_diaria = []
 
-    # Para cada elemento o fila le pedimos qe nos extraiga el texto con .text y separamos el string por espacios para que nos deje dos elementos correspondientes a fecha y referencia (precio del dolar). Luego lo agregamos a la lista "dolar_historico_base" que creamos anteriormente.
     for fila in filas:
-        texto = fila.text
-        lista_separada = texto.split()
-        cotizacion_cedear_diaria.append(lista_separada)
+        celdas = fila.find_elements(By.TAG_NAME, 'td')
+        if len(celdas) < 13:
+            continue
 
-    # Eliminamos la primer fila de nombres
-    cotizacion_cedear_diaria.pop(0)
+        ticker = celdas[1].text.strip()
+        nombre_largo = celdas[2].get_attribute('title') or celdas[2].text.strip()
+        ultima_cotizacion = convertir_a_float(celdas[3].text.strip())
+        pct_dia = convertir_a_float(celdas[4].text.strip())
+        pct_mes = convertir_a_float(celdas[5].text.strip())
+        pct_anio = convertir_a_float(celdas[6].text.strip())
+        vol_nominal = convertir_volumen(celdas[7].text.strip())
+        vol_efectivo = convertir_volumen(celdas[8].text.strip())
+        ratio = celdas[11].text.strip()  # se queda como texto, ej "20:1"
+        ccl = convertir_a_float(celdas[12].text.strip())
 
-    #logger.info(cotizacion_cedear_diaria)
+        registro = [
+            ticker, ultima_cotizacion, pct_dia, pct_mes, pct_anio,
+            vol_nominal, vol_efectivo, ratio, ccl, nombre_largo
+        ]
+        cotizacion_cedear_diaria.append(registro)
 
-    # Aplicamos la conversion de datos
-    for i in range(len(cotizacion_cedear_diaria)):
-        for j in range(1, len(cotizacion_cedear_diaria[i])):
-            cotizacion_cedear_diaria[i][j] = convertir_a_float(cotizacion_cedear_diaria[i][j])
+    driver.switch_to.default_content()
 
-    #logger.info(cotizacion_cedear_diaria)
     return cotizacion_cedear_diaria
 
 
 
-def obtener_acciones_lider(driver,url='https://www.rava.com/cotizaciones/acciones-argentinas'):
-    
-    # Con el driver previamente cargado, se abre chrome, y le pasamos la url que queremos que entre 
+def obtener_acciones_lider(driver, url='https://www.rava.com/cotizaciones/acciones-argentinas'):
     driver.get(url)
-
     time.sleep(15)
 
-    # Clickeamos el boton "GENERAL" para cambiar al grafico de cotizacion del cuadro general
-    driver.find_element(By.XPATH,'/html/body/div[1]/main/div/div/div[2]/div/div/ul/li[1]/a').click()
-
-    time.sleep(5)
-
-    # Ubicamos el elemento tbody de la tabla de dolar historico con XPATH (camino html para ubicar el elemento). Busca solo el contenido, no las etiquetas
     try:
-        elemento_tabla_lider = driver.find_element(By.XPATH, '//table[@id="table"]')
+        WebDriverWait(driver, 20).until(
+            EC.frame_to_be_available_and_switch_to_it((By.ID, "embed-frame-acciones-argentinas"))
+        )
+        elemento_tabla = WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((
+                By.XPATH,
+                "//span[text()='Panel Líder (Merval)']/ancestor::div[contains(@class,'flex-col')][1]//table"
+            ))
+        )
+    except TimeoutException as e:
+        logger.error(f"No se pudo encontrar la tabla de acciones lider (timeout): {e}")
+        driver.switch_to.default_content()
+        return []
     except Exception as e:
-        logger.error(f"No se pudo encontrar la tabla: {e}")
+        logger.error(f"No se pudo encontrar la tabla de acciones lider: {e}")
+        driver.switch_to.default_content()
         return []
 
-    # Extraemos los elementos del body de la tabla correspondiente a cada uno de los registros de la misma. (con el punto le indicamos que tiene que buscar dentro del tbody y no en todo el html)
-    filas_lider = elemento_tabla_lider.find_elements(By.XPATH, './/tr')
-
+    filas_lider = elemento_tabla.find_elements(By.XPATH, './/tbody/tr')
     logger.info(f'Se encontraron {len(filas_lider)} registros en la tabla de acciones argentinas lideres')
 
-    # Creamos una lista para guardar la informacion extraida de la web
     cotizacion_acciones_arg_diaria_lider = []
 
-    # Para cada elemento o fila le pedimos qe nos extraiga el texto con .text y separamos el string por espacios para que nos deje dos elementos correspondientes a fecha y referencia (precio del dolar). Luego lo agregamos a la lista "dolar_historico_base" que creamos anteriormente.
-    for fila_lider in filas_lider[1:]:
-        texto_lider = fila_lider.text
-        lista_separada_lider = texto_lider.split()
-        lista_separada_lider.append('Lider')
-        cotizacion_acciones_arg_diaria_lider.append(lista_separada_lider)
+    for fila in filas_lider:
+        celdas = fila.find_elements(By.TAG_NAME, 'td')
+        if len(celdas) < 11:
+            continue
 
-    
-    # Aplicamos la conversion de datos
-    for i in range(len(cotizacion_acciones_arg_diaria_lider)):
-        for j in range(1, len(cotizacion_acciones_arg_diaria_lider[i])):  # Desde el segundo elemento
-            cotizacion_acciones_arg_diaria_lider[i][j] = convertir_a_float(cotizacion_acciones_arg_diaria_lider[i][j])
+        ticker = celdas[1].text.strip()
+        ultima_cotizacion = convertir_a_float(celdas[3].text.strip())
+        pct_dia = convertir_a_float(celdas[4].text.strip())
+        pct_mes = convertir_a_float(celdas[5].text.strip())
+        pct_anio = convertir_a_float(celdas[6].text.strip())
+        vol_nominal = convertir_volumen(celdas[7].text.strip())
+        vol_efectivo = convertir_volumen(celdas[8].text.strip())
 
-    #cotizacion_acciones_arg_diaria_lider.append('Lider')
+        registro = [ticker, ultima_cotizacion, pct_dia, pct_mes, pct_anio, vol_nominal, vol_efectivo, 'Lider']
+        cotizacion_acciones_arg_diaria_lider.append(registro)
 
-    #logger.info(cotizacion_acciones_arg_diaria_lider)
-
+    driver.switch_to.default_content()
     return cotizacion_acciones_arg_diaria_lider
 
 
-def obtener_acciones_general(driver,url='https://www.rava.com/cotizaciones/acciones-argentinas'):
-    
-    # Con el driver previamente cargado, se abre chrome, y le pasamos la url que queremos que entre 
+def obtener_acciones_general(driver, url='https://www.rava.com/cotizaciones/acciones-argentinas'):
     driver.get(url)
-
     time.sleep(15)
-    
-    # Clickeamos el boton "GENERAL" para cambiar al grafico de cotizacion del cuadro general
-    driver.find_element(By.XPATH,'/html/body/div[1]/main/div/div/div[2]/div/div/ul/li[2]/a').click()
-    
-    time.sleep(5)
 
-    # Ubicamos el elemento tbody de la tabla de dolar historico con XPATH (camino html para ubicar el elemento). Busca solo el contenido, no las etiquetas
     try:
-        elemento_tabla_general = driver.find_element(By.XPATH, '//table[@id="table"]')
+        WebDriverWait(driver, 20).until(
+            EC.frame_to_be_available_and_switch_to_it((By.ID, "embed-frame-acciones-argentinas"))
+        )
+        elemento_tabla = WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((
+                By.XPATH,
+                "//span[text()='Panel General']/ancestor::div[contains(@class,'flex-col')][1]//table"
+            ))
+        )
+    except TimeoutException as e:
+        logger.error(f"No se pudo encontrar la tabla de acciones general (timeout): {e}")
+        driver.switch_to.default_content()
+        return []
     except Exception as e:
-        logger.error(f"No se pudo encontrar la tabla: {e}")
+        logger.error(f"No se pudo encontrar la tabla de acciones general: {e}")
+        driver.switch_to.default_content()
         return []
 
-    # Extraemos los elementos del body de la tabla correspondiente a cada uno de los registros de la misma. (con el punto le indicamos que tiene que buscar dentro del tbody y no en todo el html)
-    filas_general = elemento_tabla_general.find_elements(By.XPATH, './/tr')
-
+    filas_general = elemento_tabla.find_elements(By.XPATH, './/tbody/tr')
     logger.info(f'Se encontraron {len(filas_general)} registros en la tabla acciones argentinas general')
 
     cotizacion_acciones_arg_diaria_general = []
 
-    # Para cada elemento o fila le pedimos qe nos extraiga el texto con .text y separamos el string por espacios para que nos deje dos elementos correspondientes a fecha y referencia (precio del dolar). Luego lo agregamos a la lista "dolar_historico_base" que creamos anteriormente.
-    for fila_general in filas_general[1:]:
-        texto_general = fila_general.text
-        lista_separada_general = texto_general.split()
-        lista_separada_general.append('General')
-        cotizacion_acciones_arg_diaria_general.append(lista_separada_general)
-            
-    # Aplicamos la conversion de datos a todas las filas
-    for i in range(len(cotizacion_acciones_arg_diaria_general)):
-        for j in range(1, len(cotizacion_acciones_arg_diaria_general[i])):  # Desde el segundo elemento
-            cotizacion_acciones_arg_diaria_general[i][j] = convertir_a_float(cotizacion_acciones_arg_diaria_general[i][j])
+    for fila in filas_general:
+        celdas = fila.find_elements(By.TAG_NAME, 'td')
+        if len(celdas) < 11:
+            continue
 
-    #cotizacion_acciones_arg_diaria_general.append('General')
+        ticker = celdas[1].text.strip()
+        ultima_cotizacion = convertir_a_float(celdas[3].text.strip())
+        pct_dia = convertir_a_float(celdas[4].text.strip())
+        pct_mes = convertir_a_float(celdas[5].text.strip())
+        pct_anio = convertir_a_float(celdas[6].text.strip())
+        vol_nominal = convertir_volumen(celdas[7].text.strip())
+        vol_efectivo = convertir_volumen(celdas[8].text.strip())
 
-    #logger.info(cotizacion_acciones_arg_diaria_general)
- 
+        registro = [ticker, ultima_cotizacion, pct_dia, pct_mes, pct_anio, vol_nominal, vol_efectivo, 'General']
+        cotizacion_acciones_arg_diaria_general.append(registro)
+
+    driver.switch_to.default_content()
     return cotizacion_acciones_arg_diaria_general
 
 
@@ -175,11 +232,14 @@ def Carga_cotizacion_bd(cotizacion_list=None, query=None):
 
                 for data in cotizacion_list:
                     try:
+                        cur.execute("SAVEPOINT sp_registro")
                         cur.execute(query, data)
-                        conteo += 1 
+                        cur.execute("RELEASE SAVEPOINT sp_registro")
+                        conteo += 1
                     except Exception as e:
+                        cur.execute("ROLLBACK TO SAVEPOINT sp_registro")
                         logger.error(f"Error al insertar el registro {data}: {e}")
-                        continue  # Continúa con el siguiente registro
+                        continue
 
                 # Commit de los cambios
                 conn.commit()
@@ -201,33 +261,24 @@ cedear_rava_upsert_query = """
         ultima_cotizacion,
         porcentaje_gan_dia,
         porcentaje_gan_mes,
-        porcentaje_gan_año,
-        cotizacion_anterior,
-        cotizacion_apertura,
-        cotizacion_minimo,
-        cotizacion_maximo,
-        hora,
+        porcentaje_gan_anio,
         vol_nominal,
         vol_efectivo,
         ratio,
-        ccl)
-    VALUES(%s, %s,%s,%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ccl,
+        nombre_largo)
+    VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     ON CONFLICT (ticker)
-    DO update set 
-        ticker = EXCLUDED.ticker
-        , ultima_cotizacion = EXCLUDED.ultima_cotizacion
+    DO UPDATE SET
+        ultima_cotizacion = EXCLUDED.ultima_cotizacion
         , porcentaje_gan_dia = EXCLUDED.porcentaje_gan_dia
         , porcentaje_gan_mes = EXCLUDED.porcentaje_gan_mes
-        , porcentaje_gan_año = EXCLUDED.porcentaje_gan_año
-        , cotizacion_anterior = EXCLUDED.cotizacion_anterior
-        , cotizacion_apertura = EXCLUDED.cotizacion_apertura
-        , cotizacion_minimo = EXCLUDED.cotizacion_minimo
-        , cotizacion_maximo = EXCLUDED.cotizacion_maximo
-        , hora = EXCLUDED.hora
+        , porcentaje_gan_anio = EXCLUDED.porcentaje_gan_anio
         , vol_nominal = EXCLUDED.vol_nominal
         , vol_efectivo = EXCLUDED.vol_efectivo
         , ratio = EXCLUDED.ratio
         , ccl = EXCLUDED.ccl
+        , nombre_largo = EXCLUDED.nombre_largo
     ;
 """
 
@@ -239,31 +290,20 @@ acciones_lider_rava_upsert_query = """
         ultima_cotizacion,
         porcentaje_gan_dia,
         porcentaje_gan_mes,
-        porcentaje_gan_año,
-        cotizacion_anterior,
-        cotizacion_apertura,
-        cotizacion_minimo,
-        cotizacion_maximo,
-        hora,
+        porcentaje_gan_anio,
         vol_nominal,
         vol_efectivo,
         tipo_accion)
-    VALUES(%s, %s,%s,%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    VALUES(%s, %s, %s, %s, %s, %s, %s, %s)
     ON CONFLICT (ticker)
-    DO update set 
-        ticker = EXCLUDED.ticker
-        , ultima_cotizacion = EXCLUDED.ultima_cotizacion
+    DO UPDATE SET
+        ultima_cotizacion = EXCLUDED.ultima_cotizacion
         , porcentaje_gan_dia = EXCLUDED.porcentaje_gan_dia
         , porcentaje_gan_mes = EXCLUDED.porcentaje_gan_mes
-        , porcentaje_gan_año = EXCLUDED.porcentaje_gan_año
-        , cotizacion_anterior = EXCLUDED.cotizacion_anterior
-        , cotizacion_apertura = EXCLUDED.cotizacion_apertura
-        , cotizacion_minimo = EXCLUDED.cotizacion_minimo
-        , cotizacion_maximo = EXCLUDED.cotizacion_maximo
-        , hora = EXCLUDED.hora
+        , porcentaje_gan_anio = EXCLUDED.porcentaje_gan_anio
         , vol_nominal = EXCLUDED.vol_nominal
         , vol_efectivo = EXCLUDED.vol_efectivo
-        ,tipo_accion = EXCLUDED.tipo_accion
+        , tipo_accion = EXCLUDED.tipo_accion
     ;
 """
 
@@ -276,31 +316,20 @@ acciones_gral_rava_upsert_query = """
         ultima_cotizacion,
         porcentaje_gan_dia,
         porcentaje_gan_mes,
-        porcentaje_gan_año,
-        cotizacion_anterior,
-        cotizacion_apertura,
-        cotizacion_minimo,
-        cotizacion_maximo,
-        hora,
+        porcentaje_gan_anio,
         vol_nominal,
         vol_efectivo,
         tipo_accion)
-    VALUES(%s, %s,%s,%s, %s, %s, %s, %s, %s, %s, %s, %s,%s)
+    VALUES(%s, %s, %s, %s, %s, %s, %s, %s)
     ON CONFLICT (ticker)
-    DO update set 
-        ticker = EXCLUDED.ticker
-        , ultima_cotizacion = EXCLUDED.ultima_cotizacion
+    DO UPDATE SET
+        ultima_cotizacion = EXCLUDED.ultima_cotizacion
         , porcentaje_gan_dia = EXCLUDED.porcentaje_gan_dia
         , porcentaje_gan_mes = EXCLUDED.porcentaje_gan_mes
-        , porcentaje_gan_año = EXCLUDED.porcentaje_gan_año
-        , cotizacion_anterior = EXCLUDED.cotizacion_anterior
-        , cotizacion_apertura = EXCLUDED.cotizacion_apertura
-        , cotizacion_minimo = EXCLUDED.cotizacion_minimo
-        , cotizacion_maximo = EXCLUDED.cotizacion_maximo
-        , hora = EXCLUDED.hora
+        , porcentaje_gan_anio = EXCLUDED.porcentaje_gan_anio
         , vol_nominal = EXCLUDED.vol_nominal
         , vol_efectivo = EXCLUDED.vol_efectivo
-        ,tipo_accion = EXCLUDED.tipo_accion
+        , tipo_accion = EXCLUDED.tipo_accion
     ;
 """
 

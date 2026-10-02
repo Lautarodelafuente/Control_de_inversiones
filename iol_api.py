@@ -42,6 +42,7 @@ def obtener_token(url_base=url_api):
     try:
         response = requests.post(f'{url_base}/token', headers=header, data=body)
         response.raise_for_status()
+        print(response.json()["access_token"])
         return response.json()["access_token"]
     except requests.RequestException as e:
         logging.exception("Error al obtener el token: %s", e)
@@ -60,7 +61,7 @@ def operaciones(url_base=url_api):
 
     with bd.conexion_base_de_datos() as conn, conn.cursor() as cur:
         cur.execute(select_ultima_fecha_operaciones_historicas)
-        fecha_desde = cur.fetchone()[0] or '2018-01-01'
+        fecha_desde = cur.fetchone()[0] or '2018-01-01' # Si no hay datos, empezamos desde 2018-01-01
 
     fecha_hasta = date.today()
     token = obtener_token()
@@ -78,6 +79,7 @@ def operaciones(url_base=url_api):
     try:
         response = requests.get(f'{url_base}/api/v2/operaciones', headers=headers, params=params)
         response.raise_for_status()
+        #print(response.json())
         return response.json()
     except requests.RequestException as e:
         logging.exception("Error al obtener operaciones: %s", e)
@@ -113,7 +115,22 @@ def operaciones_historicas_to_database(operaciones_historicas,conn):
         INSERT INTO public.iol_operaciones_historicas
             (numero, fechaOrden, tipo, estado, mercado, simbolo, cantidad, monto, modalidad, precio, fechaOperada, cantidadOperada, precioOperado, montoOperado, plazo)
             values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-        ON CONFLICT (numero) DO NOTHING;
+        ON CONFLICT (numero) 
+        DO UPDATE SET
+            fechaOrden = EXCLUDED.fechaOrden,
+            tipo = EXCLUDED.tipo,
+            estado = EXCLUDED.estado,
+            mercado = EXCLUDED.mercado,
+            simbolo = EXCLUDED.simbolo,
+            cantidad = EXCLUDED.cantidad,
+            monto = EXCLUDED.monto,
+            modalidad = EXCLUDED.modalidad,
+            precio = EXCLUDED.precio,
+            fechaOperada = EXCLUDED.fechaOperada,
+            cantidadOperada = EXCLUDED.cantidadOperada,
+            precioOperado = EXCLUDED.precioOperado,
+            montoOperado = EXCLUDED.montoOperado,
+            plazo = EXCLUDED.plazo;
     """
 
     try:
@@ -123,7 +140,9 @@ def operaciones_historicas_to_database(operaciones_historicas,conn):
                 logging.info("No hay nuevas operaciones para insertar.")
                 return
             df = pd.DataFrame(operaciones_historicas)
-            df.replace({np.nan: None})
+            #df.replace({np.nan: None})
+            df = df.replace({np.nan: None})
+            #print(df)
             cur.executemany(query_insert, [tuple(x) for x in df.to_numpy()])
             conn.commit()
             logging.info(f'Se insertaron {len(df)} registros exitosamente.')

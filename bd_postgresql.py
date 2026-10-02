@@ -16,16 +16,24 @@ def conexion_base_de_datos():
         'port':os.getenv('POSTGRES_PORT'),
         'user':os.getenv('POSTGRES_USER'),
         'password':os.getenv('POSTGRES_PASSWORD'),
-        'dbname':os.getenv('POSTGRES_DBNAME')
+        'dbname':os.getenv('POSTGRES_DBNAME'),
+        'client_encoding': 'utf8'
     }
 
     # Creamos la coneccion a la base de datos
     try:
         conn = pg.connect(**connection)
         logger.info("Conexion a la BD realizada con exito.")
+        print('conexion exitosa a la base de datos')
         return conn
+    except UnicodeDecodeError as e:
+        mensaje_real = e.object.decode('latin-1')
+        print(f'Mensaje real del servidor (decodificado): {mensaje_real}')
+        logger.error(f"Error real de PostgreSQL: {mensaje_real}")
+        return None
     except Exception as e:
         logger.error(f"Error al conectarse a la base de datos: {e}")
+        print(f'Error al conectarse a la base de datos: {e}')
         return None  # Retorna None si falla la conexión 
 
 

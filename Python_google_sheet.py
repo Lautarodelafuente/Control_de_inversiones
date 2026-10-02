@@ -109,17 +109,17 @@ def dolar_historico_bd():
 def cotizacion_rava_bd():
     logger.info('Obteniendo cotizaciones de Rava desde la BD...')
     query = '''
-    SELECT ticker, ultima_cotizacion, porcentaje_gan_dia, porcentaje_gan_mes, porcentaje_gan_año,
+    SELECT ticker, ultima_cotizacion, porcentaje_gan_dia, porcentaje_gan_mes, porcentaje_gan_anio,
            cotizacion_anterior, cotizacion_apertura, cotizacion_minimo, cotizacion_maximo, hora,
            vol_nominal, vol_efectivo, '0' as ratio, 0 as ccl, tipo_accion
       FROM public.rava_cotizacion_acciones_arg_lider
     UNION ALL
-    SELECT ticker, ultima_cotizacion, porcentaje_gan_dia, porcentaje_gan_mes, porcentaje_gan_año,
+    SELECT ticker, ultima_cotizacion, porcentaje_gan_dia, porcentaje_gan_mes, porcentaje_gan_anio,
            cotizacion_anterior, cotizacion_apertura, cotizacion_minimo, cotizacion_maximo, hora,
            vol_nominal, vol_efectivo, '0' as ratio, 0 as ccl, tipo_accion
       FROM rava_cotizacion_acciones_arg_gral
     UNION ALL
-    SELECT ticker, ultima_cotizacion, porcentaje_gan_dia, porcentaje_gan_mes, porcentaje_gan_año,
+    SELECT ticker, ultima_cotizacion, porcentaje_gan_dia, porcentaje_gan_mes, porcentaje_gan_anio,
            cotizacion_anterior, cotizacion_apertura, cotizacion_minimo, cotizacion_maximo, hora,
            vol_nominal, vol_efectivo, ratio, ccl, 'Cedear' as tipo_accion
       FROM rava_cotizacion_cedear_diaria;
