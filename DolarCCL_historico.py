@@ -1,5 +1,8 @@
 import time
 import logging
+import os
+import csv
+import requests
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -9,8 +12,31 @@ from selenium.common.exceptions import TimeoutException
 import bd_postgresql as bd
 from Services.scraping import iniciar_scraping
 
+from urllib.parse import quote
+
 
 logger = logging.getLogger(__name__)
+
+
+CARPETA_DESCARGAS = 'descargas_historicos'
+TICKER = 'DOLAR CCL'
+
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                  '(KHTML, like Gecko) Chrome/120.0 Safari/537.36'
+}
+
+upsert_query_ccl = """
+    INSERT INTO public.dolar_ccl_historico (fecha, referencia, fecha_actualizacion)
+    VALUES (%s, %s, NOW())
+    ON CONFLICT (fecha)
+    DO UPDATE SET
+        referencia = EXCLUDED.referencia
+        , fecha_actualizacion = NOW()
+    WHERE public.dolar_ccl_historico.referencia IS DISTINCT FROM EXCLUDED.referencia
+    ;
+"""
+
 
 #-----------------------------------------------------------------------------------------------------------------------------------------------#
 
@@ -50,7 +76,7 @@ def obtener_dolar(driver):
 
 def ultima_fecha():
 
-    query = "SELECT MAX(fecha)::date FROM dolar_ccl_historico;"
+    query = "SELECT MAX(fecha)::date - interval '6' day FROM dolar_ccl_historico;"
     
     try:
         with bd.conexion_base_de_datos() as conn, conn.cursor() as cur:
@@ -61,11 +87,11 @@ def ultima_fecha():
                 ultima_fecha = ultima_fecha_bd.strftime('%d/%m/%Y')
                 logger.info(f"Última fecha registrada en BD: {ultima_fecha}")
             else:
-                ultima_fecha = "01/01/2000"  # Fecha por defecto si no hay registros en la BD
+                ultima_fecha = "01/01/2018"  # Fecha por defecto si no hay registros en la BD
 
     except Exception as e:
         logger.error(f"Error al obtener la última fecha de la BD: {e}")
-        ultima_fecha = "01/01/2000"
+        ultima_fecha = "01/01/2018"  # Fecha por defecto en caso de error
 
     return ultima_fecha
 
@@ -106,7 +132,7 @@ def proceso_gral(url):
     try:
         
         # Buscamos la fecha mas reciente de nuestra base de datos para usarla como fecha de inicio en la pagina
-        ultima_fecha_registrada = ultima_fecha()
+        ultima_fecha_registrada = "01/01/2018"#ultima_fecha()
         
         # Configuramos la fecha desde
         WebDriverWait(driver, delay).until(
@@ -142,6 +168,106 @@ def proceso_gral(url):
         logger.error(f"Ocurrio un error inesperado en el proceso: {e}")
     
 
+def descargar_dolar_ccl(carpeta=CARPETA_DESCARGAS):
+    os.makedirs(carpeta, exist_ok=True)
+    url = f'https://www.rava.com/perfil/descarga-historicos/{quote(TICKER)}'  # DOLAR%20CCL
+    ruta_archivo = os.path.join(carpeta, 'DOLAR_CCL.csv')
+
+    try:
+        respuesta = requests.get(url, headers=HEADERS, timeout=30)
+        respuesta.raise_for_status()
+    except requests.RequestException as e:
+        logger.error(f'Error al descargar el historico del dolar CCL: {e}')
+        return None
+
+    # Chequeo basico de que sea el CSV esperado y no una pagina de error/login
+    if 'especie' not in respuesta.text[:200].lower():
+        logger.error('La respuesta no parece ser el CSV esperado (¿pagina de error/login?).')
+        return None
+
+    with open(ruta_archivo, 'wb') as f:
+        f.write(respuesta.content)
+
+    logger.info(f'Historico del dolar CCL descargado en {ruta_archivo}')
+    return ruta_archivo
+
+
+def a_numero(valor):
+    try:
+        numero = float(valor)
+    except (TypeError, ValueError):
+        return None
+    return numero if numero != 0 else None  # 0 o vacio = sin dato
+
+
+def calcular_referencia(fila):
+    cierre = a_numero(fila.get('cierre'))
+    if cierre is not None:
+        return cierre
+
+    # Sin cierre: promedio entre minimo y maximo (solo si hay ambos)
+    maximo = a_numero(fila.get('maximo'))
+    minimo = a_numero(fila.get('minimo'))
+    if maximo is not None and minimo is not None:
+        return round((maximo + minimo) / 2, 2)
+
+    return None
+
+
+def leer_csv(ruta_archivo):
+    registros = []
+    with open(ruta_archivo, encoding='utf-8-sig') as f:  # utf-8-sig saca el BOM
+        for fila in csv.DictReader(f):
+            referencia = calcular_referencia(fila)
+            if referencia is None:
+                # referencia es NOT NULL en la tabla, asi que esa fecha no se puede cargar
+                logger.warning(f"Fecha {fila.get('fecha')} sin cierre ni min/max, se omite.")
+                continue
+            registros.append((fila['fecha'], referencia))
+    return registros
+
+
+def cargar_bd(registros):
+    if not registros:
+        logger.warning('No hay registros para cargar.')
+        return
+
+    conn = bd.conexion_base_de_datos()
+    if conn is None:
+        logger.error('No se pudo conectar a la base de datos.')
+        return
+
+    try:
+        with conn, conn.cursor() as cur:
+            conteo = 0
+            for data in registros:
+                try:
+                    cur.execute("SAVEPOINT sp_ccl")
+                    cur.execute(upsert_query_ccl, data)
+                    cur.execute("RELEASE SAVEPOINT sp_ccl")
+                    conteo += 1
+                except Exception as e:
+                    cur.execute("ROLLBACK TO SAVEPOINT sp_ccl")
+                    logger.error(f'Error al insertar el registro {data}: {e}')
+        logger.info(f'Se insertaron/actualizaron {conteo} registros del dolar CCL.')
+    except Exception as e:
+        logger.error(f'Error en la conexion o transaccion: {e}')
+    finally:
+        conn.close()
+
+
+def proceso_dolar_ccl():
+    ruta_archivo = descargar_dolar_ccl()
+    if ruta_archivo is None:
+        return
+
+    cargar_bd(leer_csv(ruta_archivo))
+
+    try:
+        os.remove(ruta_archivo)
+        logger.info(f'Archivo {ruta_archivo} eliminado.')
+    except OSError as e:
+        logger.error(f'No se pudo eliminar el archivo {ruta_archivo}: {e}')
 
 #-----------------------------------------------------------------------------------------------------------------------------------------------#
 
@@ -159,5 +285,8 @@ if __name__ == "__main__":
 
     # Iniciamos el proceso pasandole el link de la url que queremos scrapear
     proceso_gral('https://www.ambito.com/contenidos/dolar-cl-historico.html')
+
+
+    proceso_dolar_ccl()
 
     logging.info("Fin del proceso.")

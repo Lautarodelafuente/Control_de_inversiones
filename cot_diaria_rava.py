@@ -6,6 +6,7 @@ import time
 import bd_postgresql as bd
 from Services.scraping import iniciar_scraping
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,11 @@ def convertir_a_float(valor):
     except ValueError:
         #logging.warning(f"Valor no numerico encontrado: {valor}")
         return valor
+
+# Rava a veces muestra el precio pegado a la fecha de la ultima operacion
+# ej: '26,7706/10' (26,77 del 06/10) o '-29/08' (sin precio, ultima operacion el 29/08)
+def limpiar_precio(valor):
+    return re.sub(r'\d{2}/\d{2}$', '', valor.strip()).strip()
     
 def convertir_volumen(valor):
     if valor == '-':
@@ -94,7 +100,7 @@ def obtener_cedears(driver, url='https://www.rava.com/cotizaciones/cedears'):
 
         ticker = celdas[1].text.strip()
         nombre_largo = celdas[2].get_attribute('title') or celdas[2].text.strip()
-        ultima_cotizacion = convertir_a_float(celdas[3].text.strip())
+        ultima_cotizacion = convertir_a_float(limpiar_precio(celdas[3].text.strip()))
         pct_dia = convertir_a_float(celdas[4].text.strip())
         pct_mes = convertir_a_float(celdas[5].text.strip())
         pct_anio = convertir_a_float(celdas[6].text.strip())
@@ -149,7 +155,7 @@ def obtener_acciones_lider(driver, url='https://www.rava.com/cotizaciones/accion
             continue
 
         ticker = celdas[1].text.strip()
-        ultima_cotizacion = convertir_a_float(celdas[3].text.strip())
+        ultima_cotizacion = convertir_a_float(limpiar_precio(celdas[3].text.strip()))
         pct_dia = convertir_a_float(celdas[4].text.strip())
         pct_mes = convertir_a_float(celdas[5].text.strip())
         pct_anio = convertir_a_float(celdas[6].text.strip())
@@ -197,7 +203,7 @@ def obtener_acciones_general(driver, url='https://www.rava.com/cotizaciones/acci
             continue
 
         ticker = celdas[1].text.strip()
-        ultima_cotizacion = convertir_a_float(celdas[3].text.strip())
+        ultima_cotizacion = convertir_a_float(limpiar_precio(celdas[3].text.strip()))
         pct_dia = convertir_a_float(celdas[4].text.strip())
         pct_mes = convertir_a_float(celdas[5].text.strip())
         pct_anio = convertir_a_float(celdas[6].text.strip())

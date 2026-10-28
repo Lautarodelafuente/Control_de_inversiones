@@ -67,6 +67,7 @@ logging.info(f'INICIO - CARGA DOLARCCL HISTORICO...')
 # Iniciamos el proceso pasandole el link de la url que queremos scrapear sobre dolarCCL
 try:
     CCL_hist.proceso_gral('https://www.ambito.com/contenidos/dolar-cl-historico.html')
+    CCL_hist.proceso_dolar_ccl()
     logging.info("EXITO! Carga de datos DolarCCL historico exitosa!")
 except Exception as e:
     logging.error(f"ERROR! Al tratar de cargar los datos de DolarCCL historico: {e}")
@@ -116,7 +117,7 @@ logging.info('')
 logging.info(f'INICIO - CARGA DATOS EN GOOGLE SHEETS...')
 # Cargamos los datos del dolar en la planilla de google sheets
 try:
-    python_google_sheet.update(rango_hoja='CCL!A2', valores=python_google_sheet.dolar_historico_bd())
+    python_google_sheet.sincronizar_ccl()
     logging.info("EXITO! Carga de datos de DolarCCL en Google Sheets exitosa!")
 except Exception as e:
     logging.error(f"ERROR! Al tratar de cargar los datos de DolarCCL en Google Sheets: {e}")
@@ -126,6 +127,7 @@ try:
     logging.info("EXITO! Carga de cotizaciones Rava en Google Sheets exitosa!")
 except Exception as e:
     logging.error(f"ERROR! Al tratar de cargar los datos de cotizaciones Rava en Google Sheets: {e}")
+
 
 # --------------------------------------------------------------------------------#
 # CERRAMOS LA CONEXIoN A LA BASE DE DATOS
