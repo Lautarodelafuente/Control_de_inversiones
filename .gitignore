@@ -9,8 +9,8 @@ pyvenv.cfg
 /dist/
 main.spec
 prueba.py
-/Scripts/
+Scripts/
 /Extentions/
 /Download/
 /archivos/
-/Lib/
+Lib/

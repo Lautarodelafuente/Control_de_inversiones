@@ -1,0 +1,31 @@
+# Para actualizar pip: python -m pip install --upgrade pip
+
+# Dependencias del proyecto Control_de_inversiones (versiones de pip list --not-required)
+# Instalar con: python -m pip install -r requirements.txt
+# Las dependencias secundarias (urllib3, numpy, etc.) las resuelve pip solo.
+ 
+# Scraping (cot_diaria_rava.py, Services/scraping.py)
+selenium==4.23.1
+webdriver-manager==4.0.2
+PySocks==1.7.1
+ 
+# Base de datos PostgreSQL (bd_postgresql.py)
+# Nota: si en otra maquina falla al compilar, usar psycopg2-binary==2.9.9
+psycopg2==2.9.9
+ 
+# Variables de entorno desde el archivo .env
+python-dotenv==1.0.0
+ 
+# Descarga de historicos de Rava (cot_hist_rava.py, dolarccl_historico.py)
+requests==2.31.0
+ 
+# Google Sheets (python_google_sheet.py)
+google-api-python-client==2.111.0
+google-auth==2.25.2
+google-auth-oauthlib==1.2.0
+ 
+# Otras librerias instaladas en el entorno
+pandas==2.1.4
+DateTime==5.4
+sendgrid==6.11.0
+pyinstaller==6.3.0
