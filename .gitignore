@@ -1,16 +1,17 @@
 .env
 SERVICE_ACOUNT_KEY.json
 SERVICE_ACCOUNT_GOOGLE.txt
-/Google/
+Google/
 __pycache__/
 pyvenv.cfg
-/logs/
-/build/
-/dist/
+logs/
+build/
+dist/
 main.spec
 prueba.py
 Scripts/
-/Extentions/
-/Download/
-/archivos/
+Extentions/
+Download/
+archivos/
 Lib/
+descargas_ historicos/
